@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# production output and TypeScript caches
+dist/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# local tools and deployment metadata
+.vercel/
+.DS_Store
+tmp/
+
+# local environment files
+.env
+.env.*
+!.env.example
+
+# original and intermediate mascot artwork
+/495d543e-2ea9-4062-bace-9f9ac0ea8605.png
+/public/assets/moa-mascot-blue.png
+/public/assets/moa-mascot-chroma.png

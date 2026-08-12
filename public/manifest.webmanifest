@@ -1,0 +1,18 @@
+{
+  "name": "모아 — AI 여행 조율",
+  "short_name": "모아",
+  "description": "각자의 AI 대리인이 대신 회의하는 그룹 여행 조율 서비스",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf8f1",
+  "theme_color": "#f2714b",
+  "lang": "ko-KR",
+  "icons": [
+    {
+      "src": "/assets/moa-mascot.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
