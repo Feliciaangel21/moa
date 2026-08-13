@@ -11,6 +11,11 @@ import {
   budget, destinationPacks, itineraryDays, meetingRounds, osakaPreferences, preferenceSliders,
   replayMessages, reservations, roomMembers, type DestinationPack,
 } from './data'
+import {
+  createEmptyRoomDraft, createEmptySurveyDraft, createRoomSubmissionPayload, createSurveySubmissionPayload,
+  type HardConstraintDraft, type RoomDraft, type SurveyDraft,
+} from './formState'
+import { submitRoomDraft, submitSurveyDraft } from './formApi'
 
 type Stage = 'landing' | 'destinations' | 'create' | 'invite' | 'lobby' | 'hard' | 'sliders' | 'cards' | 'free' | 'persona-loading' | 'persona' | 'submitted' | 'running' | 'complete' | 'result' | 'replay'
 type ResultTab = 'summary' | 'itinerary' | 'booking' | 'fairness' | 'backup'
@@ -39,7 +44,10 @@ function App() {
   const [stage, setStage] = useState<Stage>(initialStage)
   const [selected, setSelected] = useState<DestinationPack>(destinationPacks.find((d) => d.id === 'osaka')!)
   const [cardIndex, setCardIndex] = useState(0)
-  const [scores, setScores] = useState(() => osakaPreferences.map((p) => p.defaultScore))
+  const [survey, setSurvey] = useState<SurveyDraft>(() => createEmptySurveyDraft(
+    preferenceSliders.map(({ id }) => id),
+    osakaPreferences.map(({ id }) => id),
+  ))
   const [tab, setTab] = useState<ResultTab>(initialResultTab)
   const [reason, setReason] = useState<string | null>(null)
   const [rerun, setRerun] = useState<string | null>(null)
@@ -48,6 +56,15 @@ function App() {
   useEffect(() => localStorage.setItem('moa-stage', stage), [stage])
   useEffect(() => { if (!toast) return; const t = window.setTimeout(() => setToast(''), 2200); return () => window.clearTimeout(t) }, [toast])
   const go = (next: Stage) => { setStage(next); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+  const submitSurvey = async () => {
+    const payload = createSurveySubmissionPayload(selected.id, survey)
+    try {
+      await submitSurveyDraft(payload)
+      go('persona-loading')
+    } catch {
+      setToast('답변을 저장하지 못했어요. 다시 시도해주세요.')
+    }
+  }
 
   return <div className="moa-app">
     {stage !== 'landing' && <Header stage={stage} home={() => go('landing')} room={() => go('lobby')} />}
@@ -58,10 +75,10 @@ function App() {
         {stage === 'create' && <CreateRoom destination={selected} back={() => go('destinations')} next={() => go('invite')} />}
         {stage === 'invite' && <InviteSuccess next={() => go('lobby')} copy={() => setToast('초대 링크를 복사했어요')} share={() => setToast('카카오톡 공유 화면을 열었어요')} />}
         {stage === 'lobby' && <Lobby start={() => go('hard')} copy={() => setToast('초대 링크를 복사했어요')} share={() => setToast('카카오톡 공유 화면을 열었어요')} nudge={() => setToast('민재님에게 확인 요청을 보냈어요')} />}
-        {stage === 'hard' && <HardSurvey next={() => go('sliders')} />}
-        {stage === 'sliders' && <SliderSurvey next={() => go('cards')} />}
-        {stage === 'cards' && <CardSurvey index={cardIndex} scores={scores} setScore={(score) => { setScores((old) => old.map((v, i) => i === cardIndex ? score : v)); if (cardIndex < 19) setCardIndex((i) => i + 1) }} back={() => setCardIndex((i) => Math.max(0, i - 1))} next={() => go('free')} />}
-        {stage === 'free' && <FreeSurvey next={() => go('persona-loading')} />}
+        {stage === 'hard' && <HardSurvey value={survey.hardConstraints} change={(hardConstraints) => setSurvey((old) => ({ ...old, hardConstraints }))} next={() => go('sliders')} />}
+        {stage === 'sliders' && <SliderSurvey values={survey.travelStyles} change={(id, value) => setSurvey((old) => ({ ...old, travelStyles: { ...old.travelStyles, [id]: value } }))} next={() => go('cards')} />}
+        {stage === 'cards' && <CardSurvey index={cardIndex} scores={survey.activityScores} setScore={(id, score) => setSurvey((old) => ({ ...old, activityScores: { ...old.activityScores, [id]: score } }))} back={() => setCardIndex((i) => Math.max(0, i - 1))} next={() => cardIndex < osakaPreferences.length - 1 ? setCardIndex((i) => i + 1) : go('free')} />}
+        {stage === 'free' && <FreeSurvey mustDo={survey.mustDo} avoid={survey.avoid} change={(field, value) => setSurvey((old) => ({ ...old, [field]: value }))} next={submitSurvey} />}
         {stage === 'persona-loading' && <PersonaLoading next={() => go('persona')} />}
         {stage === 'persona' && <Persona confirm={() => go('submitted')} edit={() => go('hard')} />}
         {stage === 'submitted' && <Submitted next={() => go('running')} room={() => go('lobby')} />}
@@ -139,7 +156,25 @@ function DestinationPicker({ selected, select, next }: { selected: DestinationPa
 }
 
 function CreateRoom({ destination, back, next }: { destination: DestinationPack; back: () => void; next: () => void }) {
-  return <Page narrow><button className="moa-back" onClick={back}><ArrowLeft /> 여행지 다시 고르기</button><div className="moa-create-grid"><div className="moa-create-visual"><img src={destination.image} alt={destination.name} /><span className="moa-photo-shade" /><div><small>선택한 여행지</small><h2>{destination.name}</h2><p>{destination.tags.join(' · ')}</p></div></div><div className="moa-form-card"><span className="moa-kicker">TRIP ROOM</span><h1>{destination.name} 여행 만들기</h1><p>여행지를 정했으면, 이제 기본 정보만 알려주세요.</p><label>여행 이름<input defaultValue="오사카 3박 4일" /></label><div className="moa-form-row"><label>시작일<div><CalendarBlank /><input defaultValue="2026.10.15" /></div></label><label>종료일<div><CalendarBlank /><input defaultValue="2026.10.18" /></div></label></div><div className="moa-form-row"><label>인원<div><UsersThree /><input defaultValue="6명" /></div></label><label>1인 예산 범위<div><Coins /><input defaultValue="70–90만원" /></div></label></div><label>취향 입력 마감일<div><Clock /><input defaultValue="2026.09.20 23:59" /></div></label><button className="moa-button full big" onClick={next}>여행 방 만들기 <ArrowRight /></button></div></div></Page>
+  const [draft, setDraft] = useState<RoomDraft>(createEmptyRoomDraft)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const change = (field: keyof RoomDraft, value: string) => setDraft((old) => ({ ...old, [field]: value }))
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      await submitRoomDraft(createRoomSubmissionPayload(destination.id, draft))
+      next()
+    } catch {
+      setSubmitError('여행 방을 만들지 못했어요. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return <Page narrow><button className="moa-back" onClick={back}><ArrowLeft /> 여행지 다시 고르기</button><div className="moa-create-grid"><div className="moa-create-visual"><img src={destination.image} alt={destination.name} /><span className="moa-photo-shade" /><div><small>선택한 여행지</small><h2>{destination.name}</h2><p>{destination.tags.join(' · ')}</p></div></div><form className="moa-form-card" onSubmit={submit}><span className="moa-kicker">TRIP ROOM</span><h1>{destination.name} 여행 만들기</h1><p>여행지를 정했으면, 이제 기본 정보만 알려주세요.</p><label>여행 이름<input name="tripName" value={draft.tripName} onChange={(e) => change('tripName', e.target.value)} placeholder={`${destination.name} 여행`} required /></label><div className="moa-form-row"><label>시작일<div><CalendarBlank /><input name="startDate" type="date" value={draft.startDate} onChange={(e) => change('startDate', e.target.value)} required /></div></label><label>종료일<div><CalendarBlank /><input name="endDate" type="date" value={draft.endDate} min={draft.startDate} onChange={(e) => change('endDate', e.target.value)} required /></div></label></div><div className="moa-form-row"><label>인원<div><UsersThree /><input name="memberCount" type="number" min="2" max="30" value={draft.memberCount} onChange={(e) => change('memberCount', e.target.value)} placeholder="예: 6" required /></div></label><label>1인 예산<div><Coins /><input name="budgetRange" inputMode="numeric" value={draft.budgetRange} onChange={(e) => change('budgetRange', e.target.value)} placeholder="예: 800000" required /></div></label></div><label>취향 입력 마감일<div><Clock /><input name="responseDeadline" type="datetime-local" value={draft.responseDeadline} onChange={(e) => change('responseDeadline', e.target.value)} required /></div></label>{submitError && <p className="moa-form-error" role="alert">{submitError}</p>}<button type="submit" className="moa-button full big" disabled={submitting}>{submitting ? '만드는 중…' : '여행 방 만들기'} {!submitting && <ArrowRight />}</button></form></div></Page>
 }
 
 function InviteSuccess({ next, copy, share }: { next: () => void; copy: () => void; share: () => void }) {
@@ -191,29 +226,32 @@ function Lobby({ start, copy, share, nudge }: { start: () => void; copy: () => v
   </div></Page>
 }
 
-function SurveyShell({ step, time, title, copy, children, next, nextLabel = '다음' }: { step: number; time: string; title: string; copy: string; children: React.ReactNode; next: () => void; nextLabel?: string }) {
-  return <Page narrow><SurveyProgress step={step} time={time} /><div className="moa-survey-title"><span className="moa-kicker">PART {step} OF 4</span><h1>{title}</h1><p>{copy}</p></div>{children}<StickyAction note={step < 4 ? `약 ${time} 남았어요` : '이제 내 편을 만들 차례예요'} button={nextLabel} onClick={next} /></Page>
+function SurveyShell({ step, time, title, copy, children, next, nextLabel = '다음', disabled = false }: { step: number; time: string; title: string; copy: string; children: React.ReactNode; next: () => void; nextLabel?: string; disabled?: boolean }) {
+  return <Page narrow><SurveyProgress step={step} time={time} /><div className="moa-survey-title"><span className="moa-kicker">PART {step} OF 4</span><h1>{title}</h1><p>{copy}</p></div>{children}<StickyAction note={disabled ? '먼저 답을 골라주세요' : step < 4 ? `약 ${time} 남았어요` : '이제 내 편을 만들 차례예요'} button={nextLabel} onClick={next} disabled={disabled} /></Page>
 }
 
 function SurveyProgress({ step, time }: { step: number; time: string }) { return <div className="moa-survey-progress"><div>{[1,2,3,4].map((n) => <span className={n <= step ? 'active' : ''} key={n} />)}</div><p><strong>{step} / 4</strong><small>약 {time} 남았어요</small></p></div> }
 
-function HardSurvey({ next }: { next: () => void }) {
-  const [diet, setDiet] = useState('없음'); const [nope, setNope] = useState(['새벽 비행', '도미토리']); const togg = (v: string) => setNope((old) => old.includes(v) ? old.filter((x) => x !== v) : [...old, v])
-  return <SurveyShell step={1} time="6분" title="이건 진짜 안 돼요." copy="여기서 고른 건 대리인이 절대 양보하지 않아요." next={next}><div className="moa-hard-grid"><SurveyCard icon={Coins} title="예산"><label className="moa-field">1인 총예산 상한<div className="moa-money"><b>₩</b><input defaultValue="900,000" /><span>원</span></div></label><label className="moa-switch"><input type="checkbox" defaultChecked /><span /> 항공 포함</label></SurveyCard><SurveyCard icon={ForkKnife} title="먹는 것"><ChipGroup items={['없음','비건','베지테리언','할랄','코셔','알레르기']} selected={[diet]} select={(v) => setDiet(v)} /></SurveyCard><SurveyCard icon={ShieldCheck} title="생활 · 신념"><ChipGroup items={['기도 시간 필요','음주 일정 제외','동물 체험 제외']} selected={[]} select={() => {}} plus /></SurveyCard><SurveyCard icon={SuitcaseRolling} title="체력 · 이동"><label className="moa-field">하루에 얼마나 걸을 수 있나요?<input type="range" min="1" max="15" defaultValue="6" /><div className="moa-range-label"><span>1km</span><strong>6km</strong><span>15km</span></div></label><ChipGroup items={['계단·경사 어려움','휠체어','유아차']} selected={[]} select={() => {}} /></SurveyCard></div><SurveyCard icon={LockKey} title="절대 안 돼요" full><ChipGroup items={['새벽 비행','도미토리','남녀 혼숙','날것','놀이기구','장시간 버스','흡연실']} selected={nope} select={togg} plus /></SurveyCard><div className="moa-warning"><Warning weight="fill" /><p><strong>빠진 조건은 없나요?</strong><span>여기에 적지 않으면 대리인이 모를 수도 있어요.</span></p></div></SurveyShell>
+function HardSurvey({ value, change, next }: { value: HardConstraintDraft; change: (value: HardConstraintDraft) => void; next: () => void }) {
+  const set = <K extends keyof HardConstraintDraft>(field: K, fieldValue: HardConstraintDraft[K]) => change({ ...value, [field]: fieldValue })
+  const toggle = (field: 'beliefs' | 'mobilityNeeds' | 'noGoItems', item: string) => set(field, value[field].includes(item) ? value[field].filter((x) => x !== item) : [...value[field], item])
+  const incomplete = !value.budgetLimit.trim() || value.diet === null || value.walkingDistanceKm === null
+  return <SurveyShell step={1} time="6분" title="이건 진짜 안 돼요." copy="여기서 고른 건 대리인이 절대 양보하지 않아요." next={next} disabled={incomplete}><div className="moa-hard-grid"><SurveyCard icon={Coins} title="예산"><label className="moa-field">1인 총예산 상한<div className="moa-money"><b>₩</b><input name="budgetLimit" inputMode="numeric" value={value.budgetLimit} onChange={(e) => set('budgetLimit', e.target.value)} placeholder="금액 입력" /><span>원</span></div></label><label className="moa-switch"><input name="includesFlight" type="checkbox" checked={value.includesFlight} onChange={(e) => set('includesFlight', e.target.checked)} /><span /> 항공 포함</label></SurveyCard><SurveyCard icon={ForkKnife} title="먹는 것"><ChipGroup items={['없음','비건','베지테리언','할랄','코셔','알레르기']} selected={value.diet ? [value.diet] : []} select={(diet) => set('diet', diet)} /></SurveyCard><SurveyCard icon={ShieldCheck} title="생활 · 신념"><ChipGroup items={['기도 시간 필요','음주 일정 제외','동물 체험 제외']} selected={value.beliefs} select={(item) => toggle('beliefs', item)} plus /></SurveyCard><SurveyCard icon={SuitcaseRolling} title="체력 · 이동"><label className={`moa-field moa-unanswered-range ${value.walkingDistanceKm === null ? 'unanswered' : ''}`}>하루에 얼마나 걸을 수 있나요?<input name="walkingDistanceKm" type="range" min="1" max="15" value={value.walkingDistanceKm ?? 8} onChange={(e) => set('walkingDistanceKm', Number(e.target.value))} /><div className="moa-range-label"><span>1km</span><strong>{value.walkingDistanceKm === null ? '선택 안 함' : `${value.walkingDistanceKm}km`}</strong><span>15km</span></div></label><ChipGroup items={['계단·경사 어려움','휠체어','유아차']} selected={value.mobilityNeeds} select={(item) => toggle('mobilityNeeds', item)} /></SurveyCard></div><SurveyCard icon={LockKey} title="절대 안 돼요" full><ChipGroup items={['새벽 비행','도미토리','남녀 혼숙','날것','놀이기구','장시간 버스','흡연실']} selected={value.noGoItems} select={(item) => toggle('noGoItems', item)} plus /></SurveyCard><div className="moa-warning"><Warning weight="fill" /><p><strong>빠진 조건은 없나요?</strong><span>여기에 적지 않으면 대리인이 모를 수도 있어요.</span></p></div></SurveyShell>
 }
 
-function SliderSurvey({ next }: { next: () => void }) {
-  const [values, setValues] = useState<number[]>(preferenceSliders.map((p) => p[3]))
-  return <SurveyShell step={2} time="4분" title="그래서, 어떤 여행을 좋아해요?" copy="눈치 보지 말고 본인 취향대로 골라주세요." next={next}><div className="moa-slider-grid">{preferenceSliders.map(([title,left,right], i) => <article className="moa-slider" key={title}><div><strong>{title}</strong><span>{values[i]} / 7</span></div><input type="range" min="1" max="7" value={values[i]} onChange={(e) => setValues((old) => old.map((v,n) => n === i ? Number(e.target.value) : v))} /><footer><span>{left}</span><span>{right}</span></footer></article>)}</div><div className="moa-tip"><Info weight="fill" /><p><strong>MOA 안내</strong><span>딱 반반이면 가운데도 괜찮아요. 애매한 취향도 그대로 전할게요.</span></p></div></SurveyShell>
+function SliderSurvey({ values, change, next }: { values: Record<string, number | null>; change: (id: string, value: number) => void; next: () => void }) {
+  const incomplete = preferenceSliders.some(({ id }) => values[id] === null)
+  return <SurveyShell step={2} time="4분" title="그래서, 어떤 여행을 좋아해요?" copy="눈치 보지 말고 본인 취향대로 골라주세요." next={next} disabled={incomplete}><div className="moa-slider-grid">{preferenceSliders.map(({ id, title, left, right }) => <article className={`moa-slider ${values[id] === null ? 'unanswered' : ''}`} key={id}><div><strong>{title}</strong><span>{values[id] === null ? '선택 안 함' : `${values[id]} / 7`}</span></div><input name={id} type="range" min="1" max="7" value={values[id] ?? 4} onChange={(e) => change(id, Number(e.target.value))} /><footer><span>{left}</span><span>{right}</span></footer></article>)}</div><div className="moa-tip"><Info weight="fill" /><p><strong>MOA 안내</strong><span>딱 반반이면 가운데도 괜찮아요. 애매한 취향도 그대로 전할게요.</span></p></div></SurveyShell>
 }
 
-function CardSurvey({ index, scores, setScore, back, next }: { index: number; scores: number[]; setScore: (n: number) => void; back: () => void; next: () => void }) {
+function CardSurvey({ index, scores, setScore, back, next }: { index: number; scores: Record<string, number | null>; setScore: (id: string, score: number) => void; back: () => void; next: () => void }) {
   const item = osakaPreferences[index]
   const label = (n: number) => n >= 9 ? '꼭 하고 싶어요' : n >= 7 ? '좋아요' : n >= 5 ? '있어도 좋아요' : n >= 3 ? '별로 관심 없어요' : '피하고 싶어요'
-  return <SurveyShell step={3} time="2분" title="이거 얼마나 끌려요?" copy="오사카에서 해볼 것들을 1점부터 10점까지 골라주세요." next={next} nextLabel={index === 19 ? '다음' : '확인'}><div className="moa-card-counter"><strong>{index + 1}</strong> / 20<div><i style={{ width: `${(index + 1) * 5}%` }} /></div></div><motion.article key={index} className="moa-score-card" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}><img src={item.image} alt={item.name} /><span className="moa-photo-shade" /><div><span>OSAKA PICK {String(index + 1).padStart(2,'0')}</span><h2>{item.name}</h2><p>{item.context}</p></div></motion.article><div className="moa-score-selector"><div><span>안 끌려요</span><strong><b>{scores[index]}</b> — {label(scores[index])}</strong><span>꼭 할래요</span></div><div>{[1,2,3,4,5,6,7,8,9,10].map((n) => <button className={scores[index] === n ? 'active' : ''} key={n} onClick={() => setScore(n)}>{n}</button>)}</div></div><div className="moa-card-nav"><button onClick={back} disabled={index === 0}><ArrowLeft /> 이전 카드</button><p>숫자를 고르면 다음 카드로 넘어가요</p></div></SurveyShell>
+  const score = scores[item.id]
+  return <SurveyShell step={3} time="2분" title="이거 얼마나 끌려요?" copy="오사카에서 해볼 것들을 1점부터 10점까지 골라주세요." next={next} nextLabel={index === osakaPreferences.length - 1 ? '다음' : '확인'} disabled={score === null}><div className="moa-card-counter"><strong>{index + 1}</strong> / {osakaPreferences.length}<div><i style={{ width: `${((index + 1) / osakaPreferences.length) * 100}%` }} /></div></div><motion.article key={index} className="moa-score-card" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}><img src={item.image} alt={item.name} /><span className="moa-photo-shade" /><div><span>OSAKA PICK {String(index + 1).padStart(2,'0')}</span><h2>{item.name}</h2><p>{item.context}</p></div></motion.article><div className="moa-score-selector"><div><span>안 끌려요</span><strong>{score === null ? '아직 선택 안 했어요' : <><b>{score}</b> — {label(score)}</>}</strong><span>꼭 할래요</span></div><div>{[1,2,3,4,5,6,7,8,9,10].map((n) => <button type="button" aria-pressed={score === n} className={score === n ? 'active' : ''} key={n} onClick={() => setScore(item.id, n)}>{n}</button>)}</div></div><div className="moa-card-nav"><button onClick={back} disabled={index === 0}><ArrowLeft /> 이전 카드</button><p>{score === null ? '하나를 골라주세요' : '선택했어요. 다음으로 넘어갈게요'}</p></div></SurveyShell>
 }
 
-function FreeSurvey({ next }: { next: () => void }) { return <SurveyShell step={4} time="1분" title="마지막으로, 이것만 알려주세요" copy="대리인이 꼭 기억해야 할 말이 있다면 남겨주세요." next={next} nextLabel="내 대리인 만들기"><div className="moa-free-grid"><label><span><TrendUp />이번 여행에서 이것만은 꼭 하고 싶어요.</span><textarea maxLength={100} defaultValue="여행 중 하루는 온천에서 느긋하게 쉬고, 로컬 이자카야도 꼭 가고 싶어요." /><small>46 / 100</small></label><label><span><TrendDown />이것만은 정말 피하고 싶어요.</span><textarea maxLength={100} defaultValue="새벽 비행과 너무 빡빡한 일정은 피하고 싶어요. 숙소는 한 곳에서 지내고 싶습니다." /><small>45 / 100</small></label></div></SurveyShell> }
+function FreeSurvey({ mustDo, avoid, change, next }: { mustDo: string; avoid: string; change: (field: 'mustDo' | 'avoid', value: string) => void; next: () => void }) { return <SurveyShell step={4} time="1분" title="마지막으로, 이것만 알려주세요" copy="대리인이 꼭 기억해야 할 말이 있다면 남겨주세요." next={next} nextLabel="내 대리인 만들기"><div className="moa-free-grid"><label><span><TrendUp />이번 여행에서 이것만은 꼭 하고 싶어요.</span><textarea name="mustDo" maxLength={100} value={mustDo} onChange={(e) => change('mustDo', e.target.value)} placeholder="예: 하루는 온천에서 느긋하게 쉬고 싶어요." /><small>{mustDo.length} / 100</small></label><label><span><TrendDown />이것만은 정말 피하고 싶어요.</span><textarea name="avoid" maxLength={100} value={avoid} onChange={(e) => change('avoid', e.target.value)} placeholder="예: 새벽 비행과 너무 빡빡한 일정은 싫어요." /><small>{avoid.length} / 100</small></label></div></SurveyShell> }
 
 function PersonaLoading({ next }: { next: () => void }) { useEffect(() => { const t = window.setTimeout(next, 2600); return () => clearTimeout(t) }, [next]); return <section className="moa-loading"><div className="moa-status-mark loading"><SpinnerGap /></div><span className="moa-kicker">BUILDING MY AGENT</span><h1>내 편 만드는 중이에요</h1><p>답변을 하나씩 정리해서, 나를 잘 아는 대리인을 만들고 있어요.</p><div>{['절대 조건 챙기기','좋아하는 것 정리하기','말하는 방식 맞추기'].map((x,i) => <span style={{ animationDelay: `${i*.35}s` }} key={x}><SpinnerGap />{x}</span>)}</div></section> }
 
@@ -224,7 +262,8 @@ function Persona({ confirm, edit }: { confirm: () => void; edit: () => void }) {
 function Submitted({ next, room }: { next: () => void; room: () => void }) { return <section className="moa-submitted"><div className="moa-status-mark success"><Check weight="bold" /></div><span className="moa-kicker">AGENT SUBMITTED</span><h1>이제 맡겨두세요.</h1><p>다들 준비되면 대리인들이 알아서 회의를 시작해요.</p><div className="moa-readiness"><div><strong>4 / 6명</strong><span>준비 완료</span></div><div>{roomMembers.map((m,i) => <span key={m.name} style={{ background: i < 4 ? m.color : '#d8d2ca' }}>{i < 4 ? <Check /> : m.initial}</span>)}</div></div><div className="moa-leave-note"><Bell weight="duotone" /><p><strong>지금 앱을 닫아도 괜찮아요.</strong><span>계획이 완성되면 알려드릴게요.</span></p></div><div className="moa-actions"><button className="moa-button ghost" onClick={room}>준비 상태 보기</button><button className="moa-button" onClick={next}>회의 상태 보기 <ArrowRight /></button></div></section> }
 
 function MeetingRunning({ next }: { next: () => void }) {
-  return <Page narrow><div className="moa-running-head"><div><span className="moa-kicker">BACKGROUND MEETING</span><h1>지금 대신 싸우는 중이에요.</h1><p>숙소부터 식사까지, 하나씩 합의해가고 있어요.</p></div><div className="moa-running-moa"><span><SpinnerGap />MOA · 의견 맞추는 중</span></div></div><div className="moa-rounds">{meetingRounds.map((r,i) => <article className={r.state === '논의 중' ? 'active' : ''} key={r.code}><span>{r.code}</span><div><strong>{r.name}</strong><small>{i === 0 ? '여행 페이스 · 우선순위' : i === 1 ? '공항 · 패스 · 택시' : i === 2 ? '난바 후보 4곳 확인 중' : '앞선 결론을 보고 얘기할 예정'}</small></div><em className={r.state === '완료' ? 'done' : r.state === '논의 중' ? 'doing' : ''}>{r.state === '완료' ? <CheckCircle weight="fill" /> : r.state === '논의 중' ? <SpinnerGap /> : <Clock />}{r.state}</em></article>)}</div><div className="moa-async-note"><Hourglass weight="duotone" /><div><strong>5–20분 정도 걸릴 수 있어요.</strong><p>기다리지 않아도 돼요. 끝나면 바로 알려드릴게요.</p></div><label><input type="checkbox" defaultChecked /><span /> 끝나면 알림 받기</label></div><div className="moa-actions center"><button className="moa-button ghost">나중에 보기</button><button className="moa-button" onClick={next}>완료 화면 보기 <ArrowRight /></button></div></Page>
+  const [notifyWhenDone, setNotifyWhenDone] = useState(false)
+  return <Page narrow><div className="moa-running-head"><div><span className="moa-kicker">BACKGROUND MEETING</span><h1>지금 대신 싸우는 중이에요.</h1><p>숙소부터 식사까지, 하나씩 합의해가고 있어요.</p></div><div className="moa-running-moa"><span><SpinnerGap />MOA · 의견 맞추는 중</span></div></div><div className="moa-rounds">{meetingRounds.map((r,i) => <article className={r.state === '논의 중' ? 'active' : ''} key={r.code}><span>{r.code}</span><div><strong>{r.name}</strong><small>{i === 0 ? '여행 페이스 · 우선순위' : i === 1 ? '공항 · 패스 · 택시' : i === 2 ? '난바 후보 4곳 확인 중' : '앞선 결론을 보고 얘기할 예정'}</small></div><em className={r.state === '완료' ? 'done' : r.state === '논의 중' ? 'doing' : ''}>{r.state === '완료' ? <CheckCircle weight="fill" /> : r.state === '논의 중' ? <SpinnerGap /> : <Clock />}{r.state}</em></article>)}</div><div className="moa-async-note"><Hourglass weight="duotone" /><div><strong>5–20분 정도 걸릴 수 있어요.</strong><p>기다리지 않아도 돼요. 끝나면 바로 알려드릴게요.</p></div><label><input name="notifyWhenDone" type="checkbox" checked={notifyWhenDone} onChange={(e) => setNotifyWhenDone(e.target.checked)} /><span /> 끝나면 알림 받기</label></div><div className="moa-actions center"><button className="moa-button ghost">나중에 보기</button><button className="moa-button" onClick={next}>완료 화면 보기 <ArrowRight /></button></div></Page>
 }
 
 function MeetingComplete({ result, replay }: { result: () => void; replay: () => void }) { return <section className="moa-complete"><div className="moa-status-mark verdict"><Gavel weight="fill" /></div><span className="moa-kicker">MEETING COMPLETE</span><h1>오케이, 합의 봤습니다.</h1><p>누가 어디서 양보했는지도 같이 확인해보세요.</p><div className="moa-complete-stats"><span><strong>7</strong>논의 라운드</span><span><strong>42</strong>살펴본 후보</span><span><strong>7.7</strong>평균 만족도</span></div><div className="moa-actions"><button className="moa-button ghost big" onClick={replay}>어떻게 싸웠는지 구경하기</button><button className="moa-button big" onClick={result}>결과 보기 <ArrowRight /></button></div></section> }
@@ -273,9 +312,22 @@ function RerunModal({ category, close, submit }: { category:string; close:()=>vo
 
 function RoomHeading({ status, completed=false }: { status:string; completed?:boolean }) { return <div className="moa-room-heading"><div><span className="moa-kicker">OSAKA · TRIP ROOM</span><h1>오사카 3박 4일</h1><p><CalendarBlank /> 2026.10.15 – 10.18 <span>·</span><UsersThree /> 6명</p></div><em className={completed?'completed':''}>{completed?<CheckCircle weight="fill"/>:<span/>}{status}</em></div> }
 function Page({ children, narrow=false }: { children:React.ReactNode; narrow?:boolean }) { return <div className={`moa-page ${narrow?'narrow':''}`}>{children}</div> }
-function StickyAction({ note, button, onClick }: { note:string; button:string; onClick:()=>void }) { return <div className="moa-sticky"><p><CheckCircle weight="fill" />{note}</p><button className="moa-button" onClick={onClick}>{button}<ArrowRight /></button></div> }
+function StickyAction({ note, button, onClick, disabled=false }: { note:string; button:string; onClick:()=>void; disabled?:boolean }) { return <div className="moa-sticky"><p><CheckCircle weight="fill" />{note}</p><button className="moa-button" onClick={onClick} disabled={disabled}>{button}<ArrowRight /></button></div> }
 function SurveyCard({ icon:Icon,title,children,full=false }: { icon:typeof Coins; title:string; children:React.ReactNode; full?:boolean }) { return <section className={`moa-survey-card ${full?'full':''}`}><header><span><Icon weight="duotone" /></span><h2>{title}</h2></header>{children}</section> }
-function ChipGroup({ items,selected,select,plus=false }: { items:string[]; selected:string[]; select:(x:string)=>void; plus?:boolean }) { return <div className="moa-chip-group">{items.map((x)=><button className={selected.includes(x)?'active':''} onClick={()=>select(x)} key={x}>{selected.includes(x)&&<Check/>}{x}</button>)}{plus&&<button><Plus/>직접 입력</button>}</div> }
+function ChipGroup({ items,selected,select,plus=false }: { items:string[]; selected:string[]; select:(x:string)=>void; plus?:boolean }) {
+  const [adding, setAdding] = useState(false)
+  const [custom, setCustom] = useState('')
+  const visibleItems = [...items, ...selected.filter((item) => !items.includes(item))]
+  const addCustom = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const trimmed = custom.trim()
+    if (!trimmed) return
+    if (!selected.includes(trimmed)) select(trimmed)
+    setCustom('')
+    setAdding(false)
+  }
+  return <div className="moa-chip-group">{visibleItems.map((x)=><button type="button" aria-pressed={selected.includes(x)} className={selected.includes(x)?'active':''} onClick={()=>select(x)} key={x}>{selected.includes(x)&&<Check/>}{x}</button>)}{plus&&!adding&&<button type="button" onClick={() => setAdding(true)}><Plus/>직접 입력</button>}{plus&&adding&&<form className="moa-chip-custom" onSubmit={addCustom}><input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="조건 입력" autoFocus /><button type="submit">추가</button></form>}</div>
+}
 function PersonaBlock({ icon:Icon,title,children }: { icon:typeof Coins; title:string; children:React.ReactNode }) { return <section className="moa-persona-block"><header><Icon weight="duotone" /><span>{title}</span></header><div>{children}</div></section> }
 function PlanB({ icon:Icon,title,from,to,note }: { icon:typeof Warning; title:string; from:string; to:string; note:string }) { return <article className="moa-planb"><header><span><Icon weight="duotone" /></span><div><small>IF · {title}</small><strong>{title}</strong></div></header><div><p><small>ORIGINAL</small><strong>{from}</strong></p><ArrowRight/><p><small>PLAN B</small><strong>{to}</strong></p></div><footer>{note}</footer></article> }
 

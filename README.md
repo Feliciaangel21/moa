@@ -54,6 +54,19 @@ npm run lint
 npm run build
 ```
 
+## 백엔드 연결
+
+입력 폼은 제어 상태와 안정적인 필드 ID를 사용하며, 제출 시 버전이 포함된 JSON payload를 만듭니다. API 주소를 환경 변수로 설정하면 다음 엔드포인트로 전송합니다.
+
+```bash
+VITE_API_BASE_URL=https://api.example.com
+```
+
+- `POST /api/trip-rooms`
+- `POST /api/survey-responses`
+
+API 주소가 없는 로컬 개발 환경에서는 같은 payload를 `sessionStorage`에 임시 저장하므로 전체 화면 흐름을 그대로 테스트할 수 있습니다.
+
 ## 프로젝트 구조
 
 ```text
