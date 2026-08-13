@@ -9,10 +9,10 @@
   "lang": "ko-KR",
   "icons": [
     {
-      "src": "/assets/moa-mascot.png",
-      "sizes": "1254x1254",
+      "src": "/assets/moa-wordmark.png",
+      "sizes": "1042x563",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
