@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AirplaneTilt, ArrowLeft, ArrowRight, Bell, Buildings, CalendarBlank, CaretRight,
@@ -248,7 +248,16 @@ function CardSurvey({ index, scores, setScore, back, next }: { index: number; sc
   const item = osakaPreferences[index]
   const label = (n: number) => n >= 9 ? '꼭 하고 싶어요' : n >= 7 ? '좋아요' : n >= 5 ? '있어도 좋아요' : n >= 3 ? '별로 관심 없어요' : '피하고 싶어요'
   const score = scores[item.id]
-  return <SurveyShell step={3} time="2분" title="이거 얼마나 끌려요?" copy="오사카에서 해볼 것들을 1점부터 10점까지 골라주세요." next={next} nextLabel={index === osakaPreferences.length - 1 ? '다음' : '확인'} disabled={score === null}><div className="moa-card-counter"><strong>{index + 1}</strong> / {osakaPreferences.length}<div><i style={{ width: `${((index + 1) / osakaPreferences.length) * 100}%` }} /></div></div><motion.article key={index} className="moa-score-card" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}><img src={item.image} alt={item.name} /><span className="moa-photo-shade" /><div><span>OSAKA PICK {String(index + 1).padStart(2,'0')}</span><h2>{item.name}</h2><p>{item.context}</p></div></motion.article><div className="moa-score-selector"><div><span>안 끌려요</span><strong>{score === null ? '아직 선택 안 했어요' : <><b>{score}</b> — {label(score)}</>}</strong><span>꼭 할래요</span></div><div>{[1,2,3,4,5,6,7,8,9,10].map((n) => <button type="button" aria-pressed={score === n} className={score === n ? 'active' : ''} key={n} onClick={() => setScore(item.id, n)}>{n}</button>)}</div></div><div className="moa-card-nav"><button onClick={back} disabled={index === 0}><ArrowLeft /> 이전 카드</button><p>{score === null ? '하나를 골라주세요' : '선택했어요. 다음으로 넘어갈게요'}</p></div></SurveyShell>
+  const advanceTimer = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current)
+  }, [index])
+  const chooseScore = (value: number) => {
+    if (advanceTimer.current !== null) window.clearTimeout(advanceTimer.current)
+    setScore(item.id, value)
+    advanceTimer.current = window.setTimeout(next, 320)
+  }
+  return <SurveyShell step={3} time="2분" title="이거 얼마나 끌려요?" copy="오사카에서 해볼 것들을 1점부터 10점까지 골라주세요." next={next} nextLabel={index === osakaPreferences.length - 1 ? '다음' : '확인'} disabled={score === null}><div className="moa-card-counter"><strong>{index + 1}</strong> / {osakaPreferences.length}<div><i style={{ width: `${((index + 1) / osakaPreferences.length) * 100}%` }} /></div></div><motion.article key={index} className="moa-score-card" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}><img src={item.image} alt={item.name} /><span className="moa-photo-shade" /><div><span>OSAKA PICK {String(index + 1).padStart(2,'0')}</span><h2>{item.name}</h2><p>{item.context}</p></div></motion.article><div className="moa-score-selector"><div><span>안 끌려요</span><strong>{score === null ? '아직 선택 안 했어요' : <><b>{score}</b> — {label(score)}</>}</strong><span>꼭 할래요</span></div><div>{[1,2,3,4,5,6,7,8,9,10].map((n) => <button type="button" aria-pressed={score === n} className={score === n ? 'active' : ''} key={n} onClick={() => chooseScore(n)}>{n}</button>)}</div></div><div className="moa-card-nav"><button onClick={back} disabled={index === 0}><ArrowLeft /> 이전 카드</button><p aria-live="polite">{score === null ? '하나를 골라주세요' : '선택했어요. 다음으로 넘어갈게요'}</p></div></SurveyShell>
 }
 
 function FreeSurvey({ mustDo, avoid, change, next }: { mustDo: string; avoid: string; change: (field: 'mustDo' | 'avoid', value: string) => void; next: () => void }) { return <SurveyShell step={4} time="1분" title="마지막으로, 이것만 알려주세요" copy="대리인이 꼭 기억해야 할 말이 있다면 남겨주세요." next={next} nextLabel="내 대리인 만들기"><div className="moa-free-grid"><label><span><TrendUp />이번 여행에서 이것만은 꼭 하고 싶어요.</span><textarea name="mustDo" maxLength={100} value={mustDo} onChange={(e) => change('mustDo', e.target.value)} placeholder="예: 하루는 온천에서 느긋하게 쉬고 싶어요." /><small>{mustDo.length} / 100</small></label><label><span><TrendDown />이것만은 정말 피하고 싶어요.</span><textarea name="avoid" maxLength={100} value={avoid} onChange={(e) => change('avoid', e.target.value)} placeholder="예: 새벽 비행과 너무 빡빡한 일정은 싫어요." /><small>{avoid.length} / 100</small></label></div></SurveyShell> }
