@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import {
   AirplaneTilt, ArrowLeft, ArrowRight, Bell, Buildings, CalendarBlank, CaretRight,
   ChartDonut, Check, CheckCircle, Clock, Coins, Copy, ForkKnife, Gavel, Hourglass, Info,
-  Link, LockKey, MagicWand, MapPin, Pause, Play, Plus, Receipt, ShareNetwork,
+  LockKey, MagicWand, MapPin, Pause, Play, Plus, Receipt, ShareNetwork,
   ShieldCheck, SpinnerGap, SuitcaseRolling, Ticket, TrendDown, TrendUp, UsersThree,
   Warning, X,
 } from '@phosphor-icons/react'
@@ -57,7 +57,7 @@ function App() {
         {stage === 'destinations' && <DestinationPicker selected={selected} select={setSelected} next={() => go('create')} />}
         {stage === 'create' && <CreateRoom destination={selected} back={() => go('destinations')} next={() => go('invite')} />}
         {stage === 'invite' && <InviteSuccess next={() => go('lobby')} copy={() => setToast('초대 링크를 복사했어요')} share={() => setToast('카카오톡 공유 화면을 열었어요')} />}
-        {stage === 'lobby' && <Lobby start={() => go('hard')} copy={() => setToast('초대 링크를 복사했어요')} />}
+        {stage === 'lobby' && <Lobby start={() => go('hard')} copy={() => setToast('초대 링크를 복사했어요')} share={() => setToast('카카오톡 공유 화면을 열었어요')} nudge={() => setToast('민재님에게 확인 요청을 보냈어요')} />}
         {stage === 'hard' && <HardSurvey next={() => go('sliders')} />}
         {stage === 'sliders' && <SliderSurvey next={() => go('cards')} />}
         {stage === 'cards' && <CardSurvey index={cardIndex} scores={scores} setScore={(score) => { setScores((old) => old.map((v, i) => i === cardIndex ? score : v)); if (cardIndex < 19) setCardIndex((i) => i + 1) }} back={() => setCardIndex((i) => Math.max(0, i - 1))} next={() => go('free')} />}
@@ -146,9 +146,49 @@ function InviteSuccess({ next, copy, share }: { next: () => void; copy: () => vo
   return <Page narrow><section className="moa-room-created"><div className="moa-status-mark success"><Check weight="bold" /></div><span className="moa-kicker">ROOM IS READY</span><h1>여행 방 열었어요</h1><p>친구들에게 링크를 보내고, 각자 취향만 받으면 돼요.</p><div className="moa-created-link"><span>초대 링크</span><strong>moa.travel/join/OSK-2410</strong><button onClick={copy} aria-label="초대 링크 복사"><Copy /></button></div><div className="moa-created-actions"><button className="moa-button ghost big" onClick={copy}><Copy /> 링크 복사</button><button className="moa-kakao big" onClick={share}><ShareNetwork /> 카카오톡으로 공유</button></div><button className="moa-link" onClick={next}>여행 방 보기 <ArrowRight /></button></section></Page>
 }
 
-function Lobby({ start, copy }: { start: () => void; copy: () => void }) {
-  const statusClass = (s: string) => s === '완료' ? 'done' : s === '작성 중' ? 'doing' : s === '확인 필요' ? 'confirm' : 'idle'
-  return <Page><RoomHeading status="취향 받는 중" /><div className="moa-room-banner"><div><span className="moa-kicker light">INVITE YOUR CREW</span><h2>각자 편할 때 취향을 알려주세요</h2><p>서로 답은 안 보여요. 모두 준비되면 대리인들이 알아서 시작해요.</p><button onClick={copy}><Link /> 초대 링크 복사</button></div><div className="moa-deadline"><Clock /><p><small>취향 입력 마감</small><strong>9월 20일 23:59</strong></p></div></div><div className="moa-room-section-head"><div><h2>누가 준비됐나요?</h2><p>같이 접속할 필요 없이 각자 시간 날 때 하면 돼요.</p></div><strong>3 / 6명 준비 완료</strong></div><div className="moa-member-grid">{roomMembers.map((m, index) => <article key={m.name}><span className="moa-member-avatar" style={{ color: m.color, background: m.pale }}>{m.initial}</span><div><strong>{m.name}{index === 0 && <i>나</i>}</strong><small>{m.status === '완료' ? '대리인 준비 완료' : m.status === '작성 중' ? '취향 입력 중 · 65%' : m.status === '확인 필요' ? '대리인 확인 필요' : '아직 시작 전'}</small></div><em className={statusClass(m.status)}>{m.status}</em></article>)}</div><div className="moa-callout"><span><UsersThree weight="fill" /></span><div><strong>민지님의 대리인도 만들어볼까요?</strong><p>약 7분이면 끝나요. 제출하고 나면 앱을 닫아도 돼요.</p></div><button className="moa-button" onClick={start}>내 취향 입력하기 <ArrowRight /></button></div></Page>
+function Lobby({ start, copy, share, nudge }: { start: () => void; copy: () => void; share: () => void; nudge: () => void }) {
+  const ready = roomMembers.filter((m) => m.status === '완료').length
+  const line = (s: string) => s === '완료' ? '대리인 준비 완료' : s === '작성 중' ? '취향 입력 중 · 65%' : s === '확인 필요' ? '대리인 확인 필요' : '아직 시작 전'
+  return <Page><div className="moa-room">
+    <header className="moa-room-top">
+      <span className="moa-room-eyebrow">OSAKA · TRIP ROOM</span>
+      <div className="moa-room-title"><h1>오사카 3박 4일</h1><span className="moa-room-state">취향 받는 중</span></div>
+      <p className="moa-room-meta">2026.10.15 – 10.18 · 6명</p>
+    </header>
+
+    <section className="moa-room-ready">
+      <p className="moa-room-ask">다들 준비됐나요?</p>
+      <strong className="moa-room-count"><b>{ready}</b> / {roomMembers.length}명 준비됐어요</strong>
+      <div className="moa-room-bar"><i style={{ width: `${(ready / roomMembers.length) * 100}%` }} /></div>
+      <p className="moa-room-ready-note">모두 준비되면 대리인 회의가 자동으로 시작돼요.</p>
+    </section>
+
+    <section className="moa-room-roster">
+      <p className="moa-room-roster-note">각자 시간 될 때 취향만 남겨주세요.</p>
+      <ul>{roomMembers.map((m, index) => <li key={m.name}>
+        <span className="moa-room-avatar" style={{ color: m.color, background: m.pale }}>{m.initial}</span>
+        <div><strong>{m.name}{index === 0 && <i>나</i>}</strong><small>{line(m.status)}</small></div>
+        {m.status === '완료' && <em className="done"><Check weight="bold" /></em>}
+        {m.status === '작성 중' && <em className="doing">65%</em>}
+        {m.status === '확인 필요' && <button className="moa-room-nudge" onClick={nudge}>확인하기 <ArrowRight /></button>}
+        {m.status === '시작 전' && <em className="idle">—</em>}
+      </li>)}</ul>
+    </section>
+
+    <section className="moa-room-invite">
+      <div>
+        <span>친구 초대</span>
+        <strong className="moa-room-code">MOA-OSK-8X7P</strong>
+        <div className="moa-room-invite-actions"><button onClick={copy}>링크 복사</button><button onClick={share}>카카오톡 공유</button></div>
+      </div>
+      <div className="moa-room-due"><span>취향 입력 마감</span><strong>9월 20일 23:59</strong></div>
+    </section>
+
+    <section className="moa-room-action">
+      <div><strong>아직 내 취향을 안 남겼어요</strong><span>약 7분이면 끝나요.</span></div>
+      <button className="moa-button big" onClick={start}>내 취향 입력하기 <ArrowRight /></button>
+    </section>
+  </div></Page>
 }
 
 function SurveyShell({ step, time, title, copy, children, next, nextLabel = '다음' }: { step: number; time: string; title: string; copy: string; children: React.ReactNode; next: () => void; nextLabel?: string }) {
