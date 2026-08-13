@@ -1,10 +1,10 @@
-export type RoomDraft = {
-  tripName: string
-  startDate: string
-  endDate: string
-  memberCount: string
-  budgetRange: string
-  responseDeadline: string
+export type AvailabilityDraft = {
+  availableDates: string[]
+  unavailableDates: string[]
+  preferredNights: '1' | '2' | '3' | '4+' | null
+  nightFlexibility: 'fixed' | 'plus-minus-one' | null
+  weekdayFlexibility: 'weekends' | 'friday-pto' | 'weekdays' | null
+  flightTimeFlexibility: 'early-morning' | 'morning-onward' | 'any-time' | null
 }
 
 export type HardConstraintDraft = {
@@ -18,6 +18,7 @@ export type HardConstraintDraft = {
 }
 
 export type SurveyDraft = {
+  availability: AvailabilityDraft
   hardConstraints: HardConstraintDraft
   travelStyles: Record<string, number | null>
   activityScores: Record<string, number | null>
@@ -25,16 +26,15 @@ export type SurveyDraft = {
   avoid: string
 }
 
-export const createEmptyRoomDraft = (): RoomDraft => ({
-  tripName: '',
-  startDate: '',
-  endDate: '',
-  memberCount: '',
-  budgetRange: '',
-  responseDeadline: '',
-})
-
 export const createEmptySurveyDraft = (styleIds: string[], activityIds: string[]): SurveyDraft => ({
+  availability: {
+    availableDates: [],
+    unavailableDates: [],
+    preferredNights: null,
+    nightFlexibility: null,
+    weekdayFlexibility: null,
+    flightTimeFlexibility: null,
+  },
   hardConstraints: {
     budgetLimit: '',
     includesFlight: false,
@@ -55,18 +55,14 @@ export type SurveySubmissionPayload = SurveyDraft & {
   destinationId: string
 }
 
-export type RoomSubmissionPayload = RoomDraft & {
+export type RoomSubmissionPayload = {
   schemaVersion: 1
   destinationId: string
 }
 
-export const createRoomSubmissionPayload = (
-  destinationId: string,
-  draft: RoomDraft,
-): RoomSubmissionPayload => ({
+export const createRoomSubmissionPayload = (destinationId: string): RoomSubmissionPayload => ({
   schemaVersion: 1,
   destinationId,
-  ...draft,
 })
 
 export const createSurveySubmissionPayload = (

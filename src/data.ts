@@ -11,7 +11,8 @@ export type RoomMember = {
   initial: string
   color: string
   pale: string
-  status: '완료' | '작성 중' | '확인 필요' | '시작 전'
+  status: '초대됨' | '참여함' | '설문 시작' | '설문 완료' | '대리인 확인'
+  isHost?: boolean
   score: number
 }
 
@@ -37,12 +38,12 @@ export const destinationPacks: DestinationPack[] = [
 ]
 
 export const roomMembers: RoomMember[] = [
-  { name: '민지', initial: '민', color: '#F2714B', pale: '#FCE0D5', status: '완료', score: 8.1 },
-  { name: '지훈', initial: '지', color: '#4D8CA8', pale: '#D9EAF1', status: '완료', score: 7.8 },
-  { name: '서연', initial: '서', color: '#6C9E79', pale: '#DCEBDD', status: '작성 중', score: 7.6 },
-  { name: '민재', initial: '민', color: '#8B78B8', pale: '#E8E0F2', status: '확인 필요', score: 8.1 },
-  { name: '예린', initial: '예', color: '#D99B3D', pale: '#F8E9C8', status: '완료', score: 7.4 },
-  { name: '수아', initial: '수', color: '#B66F84', pale: '#F2DEE4', status: '시작 전', score: 7.2 },
+  { name: '민지', initial: '민', color: '#F2714B', pale: '#FCE0D5', status: '대리인 확인', isHost: true, score: 8.3 },
+  { name: '지훈', initial: '지', color: '#4D8CA8', pale: '#D9EAF1', status: '대리인 확인', score: 7.8 },
+  { name: '서연', initial: '서', color: '#6C9E79', pale: '#DCEBDD', status: '설문 시작', score: 7.6 },
+  { name: '민재', initial: '민', color: '#8B78B8', pale: '#E8E0F2', status: '대리인 확인', score: 8.1 },
+  { name: '예린', initial: '예', color: '#D99B3D', pale: '#F8E9C8', status: '대리인 확인', score: 7.4 },
+  { name: '수아', initial: '수', color: '#B66F84', pale: '#F2DEE4', status: '참여함', score: 7.2 },
 ]
 
 export const preferenceSliders = [
@@ -132,13 +133,109 @@ export const replayMessages = [
   { round: 6, type: 'verdict', speaker: '마지막 결론', text: '평균 7.7점, 가장 낮은 점수도 7.2점이에요. 이 계획으로 가기로 했어요.' },
 ]
 
-export const reservations = [
-  ['항공', '대한항공 KE723 / KE724', '₩310,000', '예약 완료'],
-  ['숙소', '난바 호텔 H-03', '₩210,000', '예약 필요'],
-  ['식당', '이자카야 B', '약 ₩38,000', '10월 1일까지'],
-  ['티켓', '스파월드 온천', '약 ₩18,000', '현장 구매 가능'],
+export type ReservationItem = {
+  id: string
+  type: '항공' | '숙소' | '식당' | '티켓'
+  name: string
+  price: string
+  status: '완료' | '예약 필요' | '현장 구매'
+  verification: '확인 완료' | '확인 필요'
+  deadline: string
+  owner: string
+  externalUrl: string
+}
+
+export const reservations: ReservationItem[] = [
+  { id:'flight', type:'항공', name:'대한항공 KE723 / KE724', price:'₩310,000', status:'완료', verification:'확인 완료', deadline:'예약 완료', owner:'민지', externalUrl:'https://example.com/moa/flights' },
+  { id:'hotel', type:'숙소', name:'난바 호텔 H-03', price:'₩210,000', status:'예약 필요', verification:'확인 완료', deadline:'10월 1일까지', owner:'서연', externalUrl:'https://example.com/moa/hotel-h03' },
+  { id:'restaurant', type:'식당', name:'이자카야 B', price:'약 ₩38,000', status:'예약 필요', verification:'확인 필요', deadline:'10월 1일까지', owner:'지훈', externalUrl:'https://example.com/moa/izakaya-b' },
+  { id:'ticket', type:'티켓', name:'스파월드 온천', price:'약 ₩18,000', status:'현장 구매', verification:'확인 완료', deadline:'출발 전 확인', owner:'예린', externalUrl:'https://example.com/moa/spaworld' },
 ]
 
+export const bookingChecklistItems = [
+  { id:'book-flight', label:'항공권 예약', reservationId:'flight', defaultDone:true },
+  { id:'book-hotel', label:'난바 호텔 예약', reservationId:'hotel', defaultDone:false },
+  { id:'book-restaurant', label:'이자카야 B 예약', reservationId:'restaurant', defaultDone:false },
+  { id:'buy-ticket', label:'스파월드 티켓 확인', reservationId:'ticket', defaultDone:false },
+  { id:'confirm-allergy', label:'갑각류 알레르기 대응 확인', reservationId:'restaurant', defaultDone:false },
+] as const
+
 export const budget = [
-  ['항공', 310000], ['숙소', 210000], ['식비', 140000], ['교통', 60000], ['액티비티', 60000],
+  ['항공', 310000], ['숙소', 210000], ['식비', 140000], ['교통', 60000], ['액티비티', 60000], ['예비비', 50000],
+]
+
+export const planReadiness = {
+  state: 'VERIFIED' as const,
+  label: '확인 완료',
+  explanation: '핵심 조건과 일정, 주요 예약 정보를 확인했어요.',
+}
+
+export type MockTrip = {
+  id: string
+  destination: string
+  dates: string
+  memberCount: number
+  readyCount: number
+  status: '계획 완료' | '취향 받는 중'
+  stage: 'result' | 'lobby'
+  image: string
+}
+
+export const mockTrips: MockTrip[] = [
+  { id:'osaka-2410', destination:'오사카', dates:'10.15 — 10.18', memberCount:6, readyCount:6, status:'계획 완료', stage:'result', image:destinationPacks.find((item) => item.id === 'osaka')!.image },
+  { id:'tokyo-2501', destination:'도쿄', dates:'날짜 조율 중', memberCount:5, readyCount:3, status:'취향 받는 중', stage:'lobby', image:destinationPacks.find((item) => item.id === 'tokyo')!.image },
+]
+
+export type DateResolutionOption = {
+  id: string
+  label: string
+  dates?: string
+  attendance?: string
+  unavailableMember?: string
+  change: string
+  recommended?: boolean
+  action: 'select' | 'extend'
+}
+
+export const mockDateResolution = {
+  status: 'NO_FULL_OVERLAP' as const,
+  summary: '현재 답변으로는 전원이 가능한 날짜가 없어요.',
+  options: [
+    { id:'attendance', label:'OPTION A', dates:'10월 15일 — 18일', attendance:'5 / 6명 가능', unavailableMember:'지훈 참석 어려움', change:'가장 많은 인원이 가능한 일정', recommended:true, action:'select' as const },
+    { id:'shorter', label:'OPTION B', dates:'11월 5일 — 7일', attendance:'6 / 6명 가능', change:'3박에서 2박으로 줄인 일정', action:'select' as const },
+    { id:'deadline', label:'OPTION C', change:'친구들이 가능 날짜를 다시 입력할 수 있게 마감 시간을 늘려요.', action:'extend' as const },
+  ],
+}
+
+export type DecisionCandidate = {
+  id: string
+  name: string
+  price: string
+  detail: string
+  groupFit: number
+}
+
+export type DecisionRound = {
+  id: 'R0' | 'R1' | 'R2' | 'R3' | 'R4' | 'R5' | 'R6'
+  name: string
+  summary: string
+  candidates: DecisionCandidate[]
+  positions: string[]
+  factCheck: string
+  winnerId: string
+  runnerUpId: string
+  reasons: string[]
+  minimumSatisfaction: number
+  constraints: string[]
+  uncertainty?: string
+}
+
+export const decisionRounds: DecisionRound[] = [
+  { id:'R0', name:'날짜 · 여행 방향', summary:'가장 많은 인원이 함께하고 3박을 유지하는 안을 비교했어요.', candidates:[{id:'D-01',name:'10월 15일 — 18일',price:'3박 4일',detail:'6명 모두 가능',groupFit:8.4},{id:'D-02',name:'11월 5일 — 7일',price:'2박 3일',detail:'일정은 짧지만 휴가 부담이 적음',groupFit:7.6}], positions:['민지 · 예린: 3박 유지','지훈 · 수아: 휴가 최소화'], factCheck:'최종 응답 기준으로 D-01은 전원 참석과 3박 조건을 함께 충족해요.', winnerId:'D-01',runnerUpId:'D-02',reasons:['전원이 참석할 수 있어요.','선호한 3박 일정을 유지해요.','항공 가격도 예산 범위예요.'],minimumSatisfaction:7.3,constraints:['전원 참석','최소 2박'],uncertainty:'항공 가격은 예약 시 달라질 수 있어요.' },
+  { id:'R1', name:'교통', summary:'공항 이동과 시내 이동을 비용·시간으로 비교했어요.', candidates:[{id:'T-01',name:'라피트 + 대중교통',price:'₩60,000 / 인',detail:'공항 38분 · 시내 이동 안정적',groupFit:8.1},{id:'T-02',name:'택시 분할 이용',price:'₩82,000 / 인',detail:'짐 이동 편함 · 교통 상황 영향',groupFit:7.4}],positions:['지훈: 비용 우선','서연 · 수아: 짐 이동 편의'],factCheck:'6명이 이동하면 라피트 조합이 1인당 약 2만 원 저렴해요.',winnerId:'T-01',runnerUpId:'T-02',reasons:['전체 교통 예산을 지켜요.','공항 이동시간 변동이 적어요.','난바 숙소와 바로 연결돼요.'],minimumSatisfaction:7.2,constraints:['총예산 상한'],uncertainty:'막차 시간은 출발 전에 다시 확인해야 해요.'},
+  { id:'R2', name:'숙소', summary:'위치와 가격이 다른 난바 숙소 두 곳을 비교했어요.',candidates:[{id:'H-03',name:'난바 호텔 H-03',price:'₩210,000 / 인',detail:'난바역 7분 · 6인 가능',groupFit:8.2},{id:'H-07',name:'난바 호텔 H-07',price:'₩180,000 / 인',detail:'난바역 15분 · 6인 가능',groupFit:7.6}],positions:['민지 · 예린: 식사 예산 우선','서연 · 지훈 · 수아: 숙소 위치 우선'],factCheck:'두 곳 모두 예산 안이지만 H-03은 매일 이동시간을 총 64분 줄여요.',winnerId:'H-03',runnerUpId:'H-07',reasons:['최저 만족도가 더 높아요.','야간 일정 후 이동이 편해요.','모두의 예산 안이에요.'],minimumSatisfaction:7.4,constraints:['6인 숙박','도미토리 제외','숙소 이동 없음'],uncertainty:'무료 취소 기한은 예약 페이지에서 확인해야 해요.'},
+  { id:'R3', name:'액티비티', summary:'강한 체험과 느긋한 휴식을 함께 넣을 방법을 비교했어요.',candidates:[{id:'A-02',name:'스파월드 + 교토',price:'₩52,000 / 인',detail:'휴식과 문화 일정 조합',groupFit:8.0},{id:'A-05',name:'유니버설 스튜디오',price:'₩89,000 / 인',detail:'하루 종일 테마파크',groupFit:7.1}],positions:['민재 · 예린: 유니버설','수아 · 지훈: 느긋한 일정'],factCheck:'유니버설은 두 명의 체력 선호와 예산 여유를 크게 낮춰요.',winnerId:'A-02',runnerUpId:'A-05',reasons:['활동 강도 차이를 줄여요.','예산 여유가 남아요.','문화와 휴식을 모두 반영해요.'],minimumSatisfaction:7.2,constraints:['장시간 대기 최소화'],uncertainty:'스파월드 운영시간은 방문 전 확인해야 해요.'},
+  { id:'R4', name:'식사', summary:'현지 분위기와 알레르기 대응 가능성을 함께 비교했어요.',candidates:[{id:'F-02',name:'이자카야 B',price:'₩38,000 / 인',detail:'6인석 문의 가능 · 해산물 제외 메뉴',groupFit:8.3},{id:'F-06',name:'오마카세 C',price:'₩82,000 / 인',detail:'예약금 필요 · 메뉴 변경 제한',groupFit:7.0}],positions:['민지 · 예린: 로컬 음식','수아: 알레르기 대응 우선'],factCheck:'이자카야 B는 갑각류 제외 주문이 가능하지만 6인석은 아직 미확정이에요.',winnerId:'F-02',runnerUpId:'F-06',reasons:['음식 취향을 가장 넓게 반영해요.','예산을 지켜요.','알레르기 대응 문의가 가능해요.'],minimumSatisfaction:7.5,constraints:['갑각류 제외'],uncertainty:'6인 예약 가능 여부를 직접 확인해야 해요.'},
+  { id:'R5', name:'동선', summary:'숙소를 옮길지 난바에서 매일 이동할지 비교했어요.',candidates:[{id:'S-01',name:'난바 중심 방사형',price:'이동 280분',detail:'한 숙소 유지 · 짐 이동 없음',groupFit:8.1},{id:'S-04',name:'오사카 + 교토 숙소 이동',price:'이동 238분',detail:'이동은 짧지만 체크인 2회',groupFit:7.2}],positions:['수아: 숙소 이동 불가','민재: 교토 체류 선호'],factCheck:'숙소를 옮기면 이동은 42분 줄지만 짐 이동과 체크인이 추가돼요.',winnerId:'S-01',runnerUpId:'S-04',reasons:['숙소 이동 불가 조건을 지켜요.','짐 보관이 쉬워요.','자유시간을 유지할 수 있어요.'],minimumSatisfaction:7.3,constraints:['숙소 이동 없음'],uncertainty:'교토 당일 교통 혼잡에 따라 복귀 시간이 달라질 수 있어요.'},
+  { id:'R6', name:'예산', summary:'앞선 결정을 모두 합쳐 개인별 최대 예산과 비교했어요.',candidates:[{id:'B-01',name:'현재 계획',price:'₩830,000 / 인',detail:'식사 예산 유지 · 예비비 5만원 포함',groupFit:8.0},{id:'B-03',name:'절약 계획',price:'₩762,000 / 인',detail:'숙소·식사 등급 조정 · 예비비 포함',groupFit:7.3}],positions:['민지: 식사 예산 유지','지훈: 총액 절감'],factCheck:'예비비를 포함한 현재 계획도 전원의 예산 상한 아래이고 최저 만족도도 7점 이상이에요.',winnerId:'B-01',runnerUpId:'B-03',reasons:['모든 개인 예산을 지켜요.','핵심 식사 경험을 유지해요.','가격 변동용 예비비를 남겨요.'],minimumSatisfaction:7.2,constraints:['개인별 예산 상한'],uncertainty:'항공·숙소 가격은 실제 예약 시 바뀔 수 있어요.'},
 ]
